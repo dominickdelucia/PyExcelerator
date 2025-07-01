@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import openpyxl
+import pandas as pd
 
 
 def python_to_excel(project_dir: str = "output", excel_path: str = "reconstructed.xlsx") -> None:
@@ -13,19 +14,31 @@ def python_to_excel(project_dir: str = "output", excel_path: str = "reconstructe
     if wb.worksheets:
         wb.remove(wb.active)
 
-    for data_file in data_dir.glob("*.json"):
-        sheet_name = data_file.stem
-        ws = wb.create_sheet(title=sheet_name)
-        with open(data_file, "r", encoding="utf-8") as f:
-            sheet_data = json.load(f)
-        for cell, value in sheet_data.items():
-            ws[cell] = value
-        formula_file = formula_dir / f"{sheet_name}.json"
-        if formula_file.exists():
-            with open(formula_file, "r", encoding="utf-8") as f:
-                formulas = json.load(f)
-            for cell, formula in formulas.items():
-                ws[cell] = formula
+    sheets = {}
+
+    for data_file in data_dir.glob("*_data_block*.json"):
+        name_part = data_file.stem
+        sheet_name = name_part.split("_data_block")[0]
+        ws = sheets.get(sheet_name)
+        if ws is None:
+            ws = wb.create_sheet(title=sheet_name)
+            sheets[sheet_name] = ws
+        df = pd.read_json(data_file, orient="split")
+        for r in df.index:
+            for c in df.columns:
+                ws[f"{c}{r}"] = df.at[r, c]
+
+    for formula_file in formula_dir.glob("*_block*.json"):
+        name_part = formula_file.stem
+        sheet_name = name_part.split("_block")[0]
+        ws = sheets.get(sheet_name)
+        if ws is None:
+            ws = wb.create_sheet(title=sheet_name)
+            sheets[sheet_name] = ws
+        with open(formula_file, "r", encoding="utf-8") as f:
+            formulas = json.load(f)
+        for cell, formula in formulas.items():
+            ws[cell] = formula
     wb.save(excel_path)
 
 
